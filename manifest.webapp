@@ -1,0 +1,34 @@
+{
+  "version": "0.1.0",
+  "name": "SMMSBackupRestore",
+  "description": "Backup and restore SMS and MMS.",
+  "launch_path": "/index.html",
+  "icons": {
+    "16": "/img/icons/icon16x16.png",
+    "48": "/img/icons/icon48x48.png",
+    "60": "/img/icons/icon60x60.png",
+    "128": "/img/icons/icon128x128.png"
+  },
+  "developer": {
+    "name": "Aurélien MANCA",
+    "url": "https://www.amanca.fr/"
+  },
+  "type": "certified",
+  "permissions": {
+    "device-storage:sdcard": {
+      "access": "readcreate"
+    },
+    "sms": {}
+  },
+  "installs_allowed_from": [
+    "*"
+  ],
+  "locales": {
+    "en-US": {
+      "name": "SMMSBackupRestore",
+      "description": "Backup and restore SMS and MMS.",
+      "permissions": {}
+    }
+  },
+  "default_locale": "en-US"
+}
