@@ -2,7 +2,7 @@
 // but without waiting for other external resources to load (css/images/etc)
 // That makes the app more responsive and perceived as faster.
 // https://developer.mozilla.org/Web/Reference/Events/DOMContentLoaded
-window.addEventListener('DOMContentLoaded', function() {
+window.addEventListener('DOMContentLoaded', function () {
 
 	// We'll ask the browser to use strict code to help us catch errors earlier.
 	// https://developer.mozilla.org/Web/JavaScript/Reference/Functions_and_function_scope/Strict_mode
@@ -10,14 +10,22 @@ window.addEventListener('DOMContentLoaded', function() {
 
 	var translate = navigator.mozL10n.get;
 	var sdcardManager = navigator.getDeviceStorage("sdcard");
-	var messageManager = window.navigator.mozSms || navigator.mozMobileMessage;
+	var messageManager = navigator.mozSms || navigator.mozMobileMessage;
+	var hasMozSmsFilter = 'MozSmsFilter' in window;
 
 	var notification = document.getElementById('notification');
-	var buttonCount = document.getElementById('button-count');
-	var buttonImport = document.getElementById('button-import');
+	var buttonCountMesssages = document.getElementById('button-count-messages');
+	var buttonCountThreads = document.getElementById('button-count-threads');
+	// var buttonImport = document.getElementById('button-import');
+	var buttonExport = document.getElementById('button-export');
 
-	var messages = [];
-	var messageCount = 0;
+	var messages;
+	var threads;
+	var settings = {
+		exportName: 'SMMS.json'
+		, smsProperties: ['body', 'delivery', 'deliveryStatus', 'id', 'messageClass', 'read', 'receiver', 'sender', 'threadId', 'timestamp', 'type']
+		, mmsProperties: ['attachments', 'delivery', 'deliveryStatus', 'expiryDate', 'id', 'read', 'receivers', 'sender', 'smil', 'subject', 'threadId', 'timestamp', 'type']
+	};
 
 	// We want to wait until the localisations library has loaded all the strings.
 	// So we'll tell it to let us know once it's ready.
@@ -25,50 +33,249 @@ window.addEventListener('DOMContentLoaded', function() {
 
 	// ---
 
-	function start() {
+	/**
+	 * Reset the variables and listen to DOM events
+	 */
+	function start () {
+		reset();
 		listen();
 	}
 
-	function listen() {
-		buttonCount.addEventListener('click', count);
-		buttonImport.addEventListener('click', importMessages);
+	/**
+	 * Add DOM events listeners
+	 */
+	function listen () {
+		buttonCountMesssages.addEventListener('click', countMessages);
+		buttonCountThreads.addEventListener('click', countThreads);
+		// buttonImport.addEventListener('click', importMessages);
+		buttonExport.addEventListener('click', exportMessages);
 	}
 
-	function count (event) {
+	/**
+	 * Remove DOM events listeners
+	 */
+	function unlisten () {
+		buttonCountMesssages.removeventListener('click', countMessages);
+		buttonCountThreads.removeEventListener('click', countThreads);
+		// buttonImport.removeEventListener('click', importMessages);
+		buttonExport.removeEventListener('click', exportMessages);
+	}
+
+	/**
+	 * Reset the default counters, stores and the notifier content
+	 */
+	function reset () {
+		messages = [];
+		threads = [];
+
+		notification.textContent = '';
+	}
+
+	/**
+	 * Count the SMS and MMS messages
+	 * @param  {Event} event DOM event
+	 */
+	function countMessages (event) {
 		event.preventDefault();
 
-		messageCount = 0;
+		reset();
 		notification.textContent = 'Counting SMS and MMS...';
 
+		fetchMessages(function () {
+			notification.textContent = 'SMS and MMS count: ' + messages.length + '.';
+		});
+	}
+
+	/**
+	 * Count the threads of SMS and MMS messages
+	 * @param  {Event} event DOM event
+	 */
+	function countThreads (event) {
+		event.preventDefault();
+
+		reset();
+		notification.textContent = 'Counting threads...';
+
+		fetchThreads(function () {
+			notification.textContent = 'Threads count: ' + threads.length + '.';
+		});
+	}
+
+	/**
+	 * Export the SMS and MMS messages to the SD card
+	 * @param  {Event} event DOM event
+	 */
+	function exportMessages (event) {
+		event.preventDefault();
+
+		reset();
+
+		var now = new Date();
+		var prefix = now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate() + '-' + now.getHours() + '-' + now.getMinutes() + '-' + now.getSeconds();
+		var filename = prefix + '-' + settings.exportName;
+
+		notification.textContent = 'Exporting messages to "' + filename + '"...';
+
+		fetchMessages(function () {
+			notification.textContent = 'Exporting ' + messages.length + ' messages to "' + filename + '"...';
+
+			saveMessagesToSdcard(filename, function () {
+				notification.textContent = 'File "' + filename + '" successfully wrote on the sdcard storage area.';
+			})
+		});
+	}
+
+	// ---
+
+	/**
+	 * Fetch the SMS and MMS messages
+	 * @param  {Function} callback Function executed once all the messages are fetched
+	 */
+	function fetchMessages (callback) {
+		// METHOD USING DATES
+		var now = Date.now();
+		var timestamp;
+		var id;
+		var count = 0;
+
 		function onsuccess () {
-			messages.push(this.result);
-			messageCount++;
+			if (this.result && this.result.id !== id) {
+				messages.push(this.result);
+				id = null;
+			}
 
 			if (!this.done) {
 				this.continue();
 			}
-			else {
-				notification.textContent = 'SMS and MMS count: ' + messageCount + '.';
+			else if (typeof callback === 'function') {
+				console.info('Fetched messages with ' + count + ' loop(s).');
+				callback();
 			}
 		}
 
 		function onerror () {
-			notification.textContent = 'Error while counting SMS and MMS: "' + this.error.name + '". Count was at index ' + messageCount + '.';
+			timestamp = messages[messages.length - 1].timestamp;
+			id = messages[messages.length - 1].id;
+			get();
+		}
+
+		function get () {
+			count++;
+			try {
+				var filter = hasMozSmsFilter ? new MozSmsFilter() : {};
+
+				if (timestamp) {
+					filter.startDate = timestamp;
+					timestamp = null;
+				}
+
+				var cursor = messageManager.getMessages(filter, true);
+				cursor.onsuccess = onsuccess;
+				cursor.onerror = onerror;
+			} catch (error) {
+				notification.textContent = 'Cannot access to messages: "' + error.name + '".';
+				console.error(error);
+			}
+		}
+
+		get();
+
+		// METHOD USING THREADS
+		// work well when not many messages in the thread
+		// var count = -1;
+
+		// function iterate () {
+		// 	count++;
+		// 	notification.textContent = messages.length + ' from ' + (count + 1) + ' thread(s)...';
+
+		// 	if (threads[count]) {
+		// 		fetchMessagesFromThread(threads[count], iterate);
+		// 	}
+		// 	else {
+		// 		callback();
+		// 	}
+		// }
+
+		// fetchThreads(iterate);
+	}
+
+	/**
+	 * Fetch a SMS and MMS messages thread
+	 * @param  {Object} thread The SMS and MMS messages thread to use as a filter
+	 * @param  {Function} callback Function executed once all the messages are fetched
+	 */
+	function fetchMessagesFromThread (thread, callback) {
+		var count = 0;
+
+		function onsuccess () {
+			if (this.result) {
+				count++;
+				messages.push(this.result);
+			}
+
+			if (!this.done) {
+				this.continue();
+			}
+			else if (typeof callback === 'function') {
+				callback();
+			}
+		}
+
+		function onerror () {
+			notification.textContent = 'Cannot fetch thread messages: "' + this.error.name + '". Message count was ' + messages.length + ' and ' + count + ' in this thread.';
+			console.error(this.error);
 		}
 
 		try {
-			var cursor = messageManager.getMessages(null, false);
+			var filter = hasMozSmsFilter ? new MozSmsFilter() : {};
+			filter.threadId = thread.id;
+
+			var cursor = messageManager.getMessages(filter, false);
 			cursor.onsuccess = onsuccess;
 			cursor.onerror = onerror;
-		} catch (e) {
-			notification.textContent = 'Cannot count SMS and MMS: "' + e.message + '".';
+		} catch (error) {
+			notification.textContent = 'Cannot access to messages: "' + error.name + '".';
+			console.error(error);
+		}
+	}
+
+	/**
+	 * Fetch the SMS and MMS messages threads
+	 * @param  {Function} callback Function executed once all the threads are fetched
+	 */
+	function fetchThreads (callback) {
+		function onsuccess () {
+			if (this.result) {
+				threads.push(this.result);
+			}
+
+			if (!this.done) {
+				this.continue();
+			}
+			else if (typeof callback === 'function') {
+				callback();
+			}
+		}
+
+		function onerror () {
+			notification.textContent = 'Cannot fetch threads: "' + this.error.name + '". Thread count was at index ' + threads.length + '.';
+			console.error(this.error);
+		}
+
+		try {
+			var cursor = messageManager.getThreads(null, false);
+			cursor.onsuccess = onsuccess;
+			cursor.onerror = onerror;
+		} catch (error) {
+			notification.textContent = 'Cannot access to messages: "' + error.name + '".';
+			console.error(error);
 		}
 	}
 
 	function importMessages (event) {
 		event.preventDefault();
 
-		messageCount = 0;
+		reset();
 		notification.textContent = 'Importing SMS and MMS...';
 
 		var messages = [
@@ -96,16 +303,15 @@ window.addEventListener('DOMContentLoaded', function() {
 				messageClass: 'normal'
 			}
 		];
-		var total = messages.length;
 		var count = 0;
 
 		function onMessageReceived (event) {
 			count++;
 			console.log(event);
 
-			notification.textContent = 'Importing message ' + count + '/' + total + '.';
+			notification.textContent = 'Importing message ' + count + '/' + messages.length + '.';
 
-			if (count === total) {
+			if (count === messages.length) {
 				messageManager.removeEventListener('received', onMessageReceived);
 				notification.textContent = 'Import successful.';
 			}
@@ -135,27 +341,60 @@ window.addEventListener('DOMContentLoaded', function() {
 		messageManager.dispatchEvent(messageEvent);
 	}
 
-	function exportMessages() {
-		var messageRequest = messageManager.getMessages(null, false);
+	/**
+	 * Create a new file with the SMS and MMS messages and save it to the SD card
+	 * @param  {Function} callback Function executed once the file is saved
+	 */
+	function saveMessagesToSdcard (filename, callback) {
+		var file = new Blob(messagesToJson(), { "type" : "text/json" });
+		var request = sdcardManager.addNamed(file, filename);
 
-		messageRequest.onsuccess = function () {
-			messages.push(messageRequest.result);
-
-			if (!cursor.done) {
-				messageRequest.continue();
-			}
-			else {
-				save();
+		request.onsuccess = function () {
+			if (typeof callback === 'function') {
+				callback();
 			}
 		}
 
-		messageRequest.onerror = function () {
-
+		// An error typically occur if a file with the same name already exist
+		request.onerror = function () {
+			notification.textContent = 'Unable to write the file: "' + this.error.name + '".';
+			console.error(this.error);
 		}
 	}
 
-	function save (messages) {
-		var oMyBlob = new Blob(messages, { "type" : "text\/json" });
-		var storageRequest = sdcardManager.addNamed(oMyBlob, "backup-messages.json");
+	/**
+	 * Loop through the messages to return a JSON export
+	 * @return {Array} The array of JSON messages
+	 */
+	function messagesToJson () {
+		return messages.map(messageToString);
+	}
+
+	/**
+	 * Export a MozSmsMessage or a MozMmsMessage to a JSON string
+	 * @param  {MozSmsMessage|MozMmsMessage} message A SMS or MMS message
+	 * @return {Object}         [description]
+	 */
+	function messageToString (message) {
+		return JSON.stringify(messageToJson(message));
+	}
+
+	/**
+	 * Export a MozSmsMessage or a MozMmsMessage to a JSON object
+	 * @param  {MozSmsMessage|MozMmsMessage} message A SMS or MMS message
+	 * @return {Object}         [description]
+	 */
+	function messageToJson (message) {
+		var properties = settings[message.type === 'mms' ? 'mmsProperties' : 'smsProperties'];
+		var obj = {};
+
+		for (var i in properties) {
+			if (properties.hasOwnProperty(i)) {
+				var property = properties[i];
+				obj[property] = message[property];
+			}
+		}
+
+		return obj;
 	}
 });

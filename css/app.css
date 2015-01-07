@@ -1,21 +1,21 @@
 html, body {
-  margin: 0;
-  padding: 0.5rem;
+	margin: 0;
+	padding: 0.5rem;
 }
 
 body {
-  font-size: 1rem;
-  background: #fff;
+	font-size: 1rem;
+	background: #fff;
 }
 
 h1 {
-  margin: 0 0 1rem 0;
+	margin: 0 0 1rem 0;
 }
 
 p {
-  font-size: inherit;
+	font-size: inherit;
 }
 
 .notification {
-  font-style: italic;
+	font-style: italic;
 }
