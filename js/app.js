@@ -16,7 +16,7 @@ window.addEventListener('DOMContentLoaded', function () {
 	var notification = document.getElementById('notification');
 	var buttonCountMesssages = document.getElementById('button-count-messages');
 	var buttonCountThreads = document.getElementById('button-count-threads');
-	// var buttonImport = document.getElementById('button-import');
+	var buttonImport = document.getElementById('button-import');
 	var buttonExport = document.getElementById('button-export');
 
 	var messages;
@@ -32,15 +32,9 @@ window.addEventListener('DOMContentLoaded', function () {
 	navigator.mozL10n.once(start);
 
 	navigator.mozSetMessageHandler('activity', function (request) {
-		var activityName = request.source.name;
-		console.log(activityName);
+		var data = request.source.data;
 
-		if (activityName === 'share') {
-			importFile(request);
-		}
-		else if (activityName === 'open') {
-			importFile(request);
-		}
+		loadFile(data.blobs[0], basename(data.filepaths[0]));
 	});
 
 	// ---
@@ -59,7 +53,7 @@ window.addEventListener('DOMContentLoaded', function () {
 	function listen () {
 		buttonCountMesssages.addEventListener('click', countMessages);
 		buttonCountThreads.addEventListener('click', countThreads);
-		// buttonImport.addEventListener('click', importMessages);
+		buttonImport.addEventListener('click', pickFile);
 		buttonExport.addEventListener('click', exportMessages);
 	}
 
@@ -69,7 +63,7 @@ window.addEventListener('DOMContentLoaded', function () {
 	function unlisten () {
 		buttonCountMesssages.removeventListener('click', countMessages);
 		buttonCountThreads.removeEventListener('click', countThreads);
-		// buttonImport.removeEventListener('click', importMessages);
+		buttonImport.removeEventListener('click', pickFile);
 		buttonExport.removeEventListener('click', exportMessages);
 	}
 
@@ -137,6 +131,28 @@ window.addEventListener('DOMContentLoaded', function () {
 				notification.textContent = 'File "' + filename + '" successfully wrote on the sdcard storage area.';
 			})
 		});
+	}
+
+	function pickFile (event) {
+		event.preventDefault();
+
+		reset();
+
+		var activity = new MozActivity({
+			name: "pick"
+			, data: {
+				type: "application/json"
+			}
+		});
+
+		activity.onsuccess = function() {
+			loadFile(this.result.blob);
+		};
+
+		activity.onerror = function () {
+			notification.textContent = 'Cannot load backup file: "' + this.error.name + '".';
+			console.error(this.error);
+		};
 	}
 
 	// ---
@@ -328,23 +344,32 @@ window.addEventListener('DOMContentLoaded', function () {
 	}
 
 	/**
-	 * Import a file from an activity request
-	 * @param  {MozActivity} request The MozActivity request
+	 * Load a backup file
+	 * @param  {File} blob     The file to load
+	 * @param  {String} filename The file name
 	 */
-	function importFile (request) {
-		var data = request.source.data;
-		var filename = basename(data.filepaths[0]);
+	function loadFile (blob, filename) {
 		var reader = new FileReader();
 
-		notification.textContent = 'Loading SMS and MMS from the file "' + filename + '"...'
+		if (filename) {
+			notification.textContent = 'Loading SMS and MMS from the file "' + filename + '"...';
+		}
+		else {
+			notification.textContent = 'Loading SMS and MMS...';
+		}
 
 		reader.addEventListener('loadend', function () {
 			messages = JSON.parse(this.result);
 
-			notification.textContent = messages.length + ' SMS and MMS loaded from the file "' + filename + '".';
+			if (filename) {
+				notification.textContent = messages.length + ' SMS and MMS loaded from the file "' + filename + '".';
+			}
+			else {
+				notification.textContent = messages.length + ' SMS and MMS loaded.';
+			}
 		});
 
-		reader.readAsText(data.blobs[0]);
+		reader.readAsText(blob);
 	}
 
 	function basename (filename) {

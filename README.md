@@ -10,12 +10,12 @@ See https://bugzilla.mozilla.org/show_bug.cgi?id=1056836#c6
 
 * SMS export
 * MMS export without attachments (see below)
+* A backup can be loaded (not yet imported)
 
 
 ## TODO
 
 * Export MMS attachments
 * Resolve the import of messages
-* Use an activity to load an import file
-* Propose XML and JSON import/export
+* Propose XML and JSON backup/restore formats
 * Show statistics with messages and threads counts
