@@ -31,6 +31,18 @@ window.addEventListener('DOMContentLoaded', function () {
 	// So we'll tell it to let us know once it's ready.
 	navigator.mozL10n.once(start);
 
+	navigator.mozSetMessageHandler('activity', function (request) {
+		var activityName = request.source.name;
+		console.log(activityName);
+
+		if (activityName === 'share') {
+			importFile(request);
+		}
+		else if (activityName === 'open') {
+			importFile(request);
+		}
+	});
+
 	// ---
 
 	/**
@@ -70,6 +82,8 @@ window.addEventListener('DOMContentLoaded', function () {
 
 		notification.textContent = '';
 	}
+
+	// ---
 
 	/**
 	 * Count the SMS and MMS messages
@@ -140,7 +154,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
 		function onsuccess () {
 			if (this.result && this.result.id !== id) {
-				messages.push(this.result);
+				messages.push(messageToJson(this.result));
 				id = null;
 			}
 
@@ -210,7 +224,7 @@ window.addEventListener('DOMContentLoaded', function () {
 		function onsuccess () {
 			if (this.result) {
 				count++;
-				messages.push(this.result);
+				messages.push(messageToJson(this.result));
 			}
 
 			if (!this.done) {
@@ -270,6 +284,71 @@ window.addEventListener('DOMContentLoaded', function () {
 			notification.textContent = 'Cannot access to messages: "' + error.name + '".';
 			console.error(error);
 		}
+	}
+
+	/**
+	 * Create a new file with the SMS and MMS messages and save it to the SD card
+	 * @param  {Function} callback Function executed once the file is saved
+	 */
+	function saveMessagesToSdcard (filename, callback) {
+		var text = JSON.stringify(messages);
+		var file = new Blob([text], { type : 'application/json' });
+		var request = sdcardManager.addNamed(file, filename);
+
+		request.onsuccess = function () {
+			if (typeof callback === 'function') {
+				callback();
+			}
+		}
+
+		// An error typically occur if a file with the same name already exist
+		request.onerror = function () {
+			notification.textContent = 'Unable to write the file: "' + this.error.name + '".';
+			console.error(this.error);
+		}
+	}
+
+	/**
+	 * Export a MozSmsMessage or a MozMmsMessage to a JSON object
+	 * @param  {MozSmsMessage|MozMmsMessage} message A SMS or MMS message
+	 * @return {Object} A JSON message object
+	 */
+	function messageToJson (message) {
+		var properties = settings[message.type === 'mms' ? 'mmsProperties' : 'smsProperties'];
+		var obj = {};
+
+		for (var i in properties) {
+			if (properties.hasOwnProperty(i)) {
+				var property = properties[i];
+				obj[property] = message[property];
+			}
+		}
+
+		return obj;
+	}
+
+	/**
+	 * Import a file from an activity request
+	 * @param  {MozActivity} request The MozActivity request
+	 */
+	function importFile (request) {
+		var data = request.source.data;
+		var filename = basename(data.filepaths[0]);
+		var reader = new FileReader();
+
+		notification.textContent = 'Loading SMS and MMS from the file "' + filename + '"...'
+
+		reader.addEventListener('loadend', function () {
+			messages = JSON.parse(this.result);
+
+			notification.textContent = messages.length + ' SMS and MMS loaded from the file "' + filename + '".';
+		});
+
+		reader.readAsText(data.blobs[0]);
+	}
+
+	function basename (filename) {
+		return filename.substring(filename.lastIndexOf('/') + 1);
 	}
 
 	function importMessages (event) {
@@ -339,62 +418,5 @@ window.addEventListener('DOMContentLoaded', function () {
 		}
 
 		messageManager.dispatchEvent(messageEvent);
-	}
-
-	/**
-	 * Create a new file with the SMS and MMS messages and save it to the SD card
-	 * @param  {Function} callback Function executed once the file is saved
-	 */
-	function saveMessagesToSdcard (filename, callback) {
-		var file = new Blob(messagesToJson(), { "type" : "text/json" });
-		var request = sdcardManager.addNamed(file, filename);
-
-		request.onsuccess = function () {
-			if (typeof callback === 'function') {
-				callback();
-			}
-		}
-
-		// An error typically occur if a file with the same name already exist
-		request.onerror = function () {
-			notification.textContent = 'Unable to write the file: "' + this.error.name + '".';
-			console.error(this.error);
-		}
-	}
-
-	/**
-	 * Loop through the messages to return a JSON export
-	 * @return {Array} The array of JSON messages
-	 */
-	function messagesToJson () {
-		return messages.map(messageToString);
-	}
-
-	/**
-	 * Export a MozSmsMessage or a MozMmsMessage to a JSON string
-	 * @param  {MozSmsMessage|MozMmsMessage} message A SMS or MMS message
-	 * @return {Object}         [description]
-	 */
-	function messageToString (message) {
-		return JSON.stringify(messageToJson(message));
-	}
-
-	/**
-	 * Export a MozSmsMessage or a MozMmsMessage to a JSON object
-	 * @param  {MozSmsMessage|MozMmsMessage} message A SMS or MMS message
-	 * @return {Object}         [description]
-	 */
-	function messageToJson (message) {
-		var properties = settings[message.type === 'mms' ? 'mmsProperties' : 'smsProperties'];
-		var obj = {};
-
-		for (var i in properties) {
-			if (properties.hasOwnProperty(i)) {
-				var property = properties[i];
-				obj[property] = message[property];
-			}
-		}
-
-		return obj;
 	}
 });

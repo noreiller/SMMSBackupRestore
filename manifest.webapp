@@ -27,8 +27,43 @@
     "en-US": {
       "name": "SMMSBackupRestore",
       "description": "Backup and restore SMS and MMS.",
-      "permissions": {}
+      "permissions": {
+        "device-storage:sdcard": {
+          "description": "Required to save the backup"
+        },
+        "sms": {
+          "description": "Required to be able to backup and restore the SMS and MMS"
+        }
+      }
+    },
+    "fr": {
+      "name": "SMMSBackupRestore",
+      "description": "Sauvegarde et restaure les SMS et MMS.",
+      "permissions": {
+        "device-storage:sdcard": {
+          "description": "Requis pour pouvoir enregistrer la sauvegarde"
+        },
+        "sms": {
+          "description": "Requis pour pouvoir sauvegarder et restaurer les SMS et MMS"
+        }
+      }
     }
   },
-  "default_locale": "en-US"
+  "default_locale": "en-US",
+  "activities": {
+    "open": {
+      "href": "/index.html",
+      "disposition": "window",
+      "filters": {
+        "type": ["application/json"]
+      }
+    },
+    "share": {
+      "href": "/index.html",
+      "disposition": "window",
+      "filters": {
+        "type": ["image/*"]
+      }
+    }
+  }
 }
